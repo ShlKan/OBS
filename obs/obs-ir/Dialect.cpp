@@ -15,12 +15,18 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
 #include <algorithm>
+#include <mlir/IR/MLIRContext.h>
+#include <mlir/IR/PatternMatch.h>
 #include <string>
+
+#include "Pass.h"
 
 using namespace mlir;
 using namespace mlir::obs;
 
 #include "Dialect.cpp.inc"
+
+class SimplifyRedundantTranspose;
 
 void OBSDialect::initialize() {
     addOperations<
@@ -202,6 +208,10 @@ mlir::LogicalResult ReturnOp::verify() {
 void TransposeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state, mlir::Value value) {
     state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
     state.addOperands(value);
+}
+
+void TransposeOp::getCanonicalizationPatterns(RewritePatternSet &result, MLIRContext *context) {
+    result.add<SimplifyRedundantTranspose>(context);
 }
 
 mlir::LogicalResult TransposeOp::verify() {

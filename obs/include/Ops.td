@@ -175,6 +175,8 @@ def TransposeOp: OBS_op<"transpose"> {
     ];
 
     let hasVerifier = 1;
+
+    let hasCanonicalizer = 1;
 }
 
 def ReturnOp : OBS_op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {

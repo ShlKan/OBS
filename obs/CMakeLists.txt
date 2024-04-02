@@ -41,6 +41,7 @@ target_link_libraries(obstest
   MLIRFunctionInterfaces
   MLIRIR
   MLIRParser
+  MLIRPass
   MLIRSideEffectInterfaces
   MLIRTransforms
 )
