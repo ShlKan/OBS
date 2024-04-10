@@ -5,7 +5,10 @@
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "ShapeInferenceInterface.td"
 
 def OBS_Dialect: Dialect {
     //The namespace of the Dialect.
@@ -21,9 +24,9 @@ def OBS_Dialect: Dialect {
     let cppNamespace = "::mlir::obs";
 }
 
-class OBS_op<string mnemonic, list<Trait> traits = []> : Op<OBS_Dialect, mnemonic, traits>;
+class OBS_Op<string mnemonic, list<Trait> traits = []> : Op<OBS_Dialect, mnemonic, traits>;
 
-def ConstantOp : OBS_op<"constant", [Pure]> {
+def ConstantOp : OBS_Op<"constant", [Pure]> {
 
     let summary = "constant operation" ;
 
@@ -40,13 +43,14 @@ def ConstantOp : OBS_op<"constant", [Pure]> {
     let hasVerifier = 1;
 
     let builders = [
-        OpBuilder<(ins "DenseElementsAttr":$value), [{build($_builder, $_state, value.getType(), value);}] >,
+        OpBuilder<(ins "DenseElementsAttr":$value), 
+        [{build($_builder, $_state, value.getType(), value);}] >,
         OpBuilder<(ins "double":$value)>
     ];
 
 }
 
-def AddOp : OBS_op<"add"> {
+def AddOp : OBS_Op<"add", [Pure, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
     let summary = "element-wise addition operation";
     let description = [{
         The "add" operation performs element-wise addition between two tensors.
@@ -63,7 +67,8 @@ def AddOp : OBS_op<"add"> {
     ];
 }  
 
-def FuncOp : OBS_op<"func", [FunctionOpInterface, IsolatedFromAbove]> {
+def FuncOp : OBS_Op<"func", 
+        [FunctionOpInterface, IsolatedFromAbove]> {
     let summary = "user defined function operation";
     let description = [{
         The "obs.func" operation represents a user defined function. These are callable SSA-region operations
@@ -100,7 +105,8 @@ def FuncOp : OBS_op<"func", [FunctionOpInterface, IsolatedFromAbove]> {
     let skipDefaultBuilders = 1;
 }
 
-def GenericCallOp: OBS_op<"generic_call"> {
+def GenericCallOp: OBS_Op<"generic_call", 
+                          [DeclareOpInterfaceMethods<CallOpInterface>]> {
     let summary = "generic call operation";
     let description = [{
         Generic calls represent calls to a user defined function that needs to be specialized for the shape
@@ -120,7 +126,8 @@ def GenericCallOp: OBS_op<"generic_call"> {
     ];
 }
 
-def MulOp : OBS_op<"mul"> {
+def MulOp : OBS_Op<"mul", [Pure, 
+    DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
     let summary = "element-wise multiplication operation";
 
     let description = [{
@@ -137,7 +144,7 @@ def MulOp : OBS_op<"mul"> {
     ];
 }
 
-def PrintOp: OBS_op<"print"> {
+def PrintOp: OBS_Op<"print"> {
     let summary = "print operation";
     let description = [{
         The print builtin operation prints a given input sensor, and produces no results.
@@ -146,7 +153,7 @@ def PrintOp: OBS_op<"print"> {
     let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def ReshapeOp: OBS_op<"reshape"> {
+def ReshapeOp: OBS_Op<"reshape", [Pure]> {
     let summary = "tensor reshape operation";
     let description = [{
         Reshape operation is transforming its input sensor into a new tensor with the same number of
@@ -156,12 +163,14 @@ def ReshapeOp: OBS_op<"reshape"> {
     let arguments = (ins F64Tensor:$input);
     let results = (outs StaticShapeTensorOf<[F64]>);
 
+    let hasCanonicalizer = 1;
+
     let assemblyFormat = [{
         `(` $input `:` type($input) `)` attr-dict `to` type(results)
     }];
 }
 
-def TransposeOp: OBS_op<"transpose"> {
+def TransposeOp: OBS_Op<"transpose", [Pure, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
     let summary = "transpose operation";
     let arguments = (ins F64Tensor:$input);
     let results = (outs F64Tensor);
@@ -179,7 +188,7 @@ def TransposeOp: OBS_op<"transpose"> {
     let hasCanonicalizer = 1;
 }
 
-def ReturnOp : OBS_op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {
+def ReturnOp : OBS_Op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {
     let summary = "return operation";
     let description = [{
         The "return" operation represents a return operation within a function;
@@ -199,6 +208,26 @@ def ReturnOp : OBS_op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {
     }];
 
     let hasVerifier = 1;
+}
+
+
+def CastOp : OBS_Op <"cast", [
+    DeclareOpInterfaceMethods<CastOpInterface>,
+    DeclareOpInterfaceMethods<ShapeInferenceOpInterface>,
+    Pure,
+    SameOperandsAndResultShape
+]> {
+    let summary = "shape cast operation";
+
+    let description = [{
+        The "cast" operation converts a tensor from one type to an equivalent type
+        without changing any data elements.
+    }];
+
+    let arguments = (ins F64Tensor:$input);
+    let results = (outs F64Tensor:$output);
+
+    let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
 }
 
 

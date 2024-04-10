@@ -11,6 +11,7 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
+#include "Passes.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
@@ -48,6 +49,8 @@ enum Action { None, DumpAST, DumpMLIR };
 static cl::opt<enum Action> emitAction("emit", cl::desc("Select the kind of output desired"), 
                            cl::values(clEnumValN(DumpAST, "ast", "output the AST dump")),
                            cl::values(clEnumValN(DumpMLIR, "mlir", "output the MLIR dump")));
+                          
+static cl::opt<bool> enableOpt("opt", cl::desc("Enable optimizations"));
 
 std::unique_ptr<obs::ModuleAST> parseInputFile(llvm::StringRef filename) {
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr = llvm::MemoryBuffer::getFileOrSTDIN(filename);
@@ -102,16 +105,22 @@ int dumpMLIR() {
   if (int error = loadMLIR(sourceMgr, context, module))
     return error;
 
-  mlir::PassManager pm(module.get()->getName());
+  if (enableOpt) {
+    mlir::PassManager pm(module.get()->getName());
     // Apply any generic pass manager command line options and run the pipeline.                                                                                      
-  if (mlir::failed(mlir::applyPassManagerCLOptions(pm)))
-    return 4;
+    if (mlir::failed(mlir::applyPassManagerCLOptions(pm)))
+      return 4;
 
-    // Add a run of the canonicalizer to optimize the mlir module.                                                                                                    
-  pm.addNestedPass<mlir::obs::FuncOp>(mlir::createCanonicalizerPass());
-  if (mlir::failed(pm.run(*module)))
-    return 4;
+    pm.addPass(mlir::createInlinerPass());
 
+
+    mlir::OpPassManager &optPM = pm.nest<mlir::obs::FuncOp>();
+    // Add a run of the canonicalizer to optimize the mlir module. 
+    optPM.addPass(mlir::obs::createShapeInferencePass());
+    optPM.addPass(mlir::createCanonicalizerPass());                                                                                                   
+    if (mlir::failed(pm.run(*module)))
+      return 4;
+  }
   module->dump();
   return 0; 
 }

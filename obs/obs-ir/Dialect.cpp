@@ -12,14 +12,20 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
 #include <algorithm>
+#include <iostream>
+#include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/IRMapping.h>
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/IR/ValueRange.h>
+#include <mlir/Interfaces/CallInterfaces.h>
+#include <mlir/Transforms/InliningUtils.h>
 #include <string>
 
-#include "Pass.h"
 
 using namespace mlir;
 using namespace mlir::obs;
@@ -28,11 +34,45 @@ using namespace mlir::obs;
 
 class SimplifyRedundantTranspose;
 
+struct ToyInlinerInterface : public DialectInlinerInterface {
+
+    using DialectInlinerInterface::DialectInlinerInterface;
+
+    bool isLegalToInline(Operation *call, Operation *callable, bool wouldbeCloned) const final {
+        return true;
+    }
+
+    bool isLegalToInline(Operation *, Region *, bool, IRMapping &) const final {
+        return true;
+    }
+
+    bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned, IRMapping &valueMapping) const final {
+        return true;
+    }
+
+    void handleTerminator(Operation *op, ValueRange valuesToRepl) const final {
+        auto returnOp = cast<ReturnOp>(op);
+        assert(op->getNumOperands() == valuesToRepl.size());
+
+        for (const auto &it : llvm::enumerate(returnOp->getOperands())) {
+            valuesToRepl[it.index()].replaceAllUsesWith(it.value());
+        }
+    }
+
+    Operation *materializeCallConversion(OpBuilder &builder, Value input,
+                                       Type resultType,
+                                       Location conversionLoc) const final {
+        return builder.create<CastOp>(conversionLoc, resultType, input);
+    }
+
+};
+
 void OBSDialect::initialize() {
     addOperations<
     #define GET_OP_LIST
     #include "Ops.cpp.inc"
     >();
+    addInterface<ToyInlinerInterface>();
 }
 
 static mlir::ParseResult parseBinaryOp(mlir::OpAsmParser &parser, mlir::OperationState &result) {
@@ -85,7 +125,6 @@ mlir::ParseResult ConstantOp::parse(mlir::OpAsmParser &parser, mlir::OperationSt
     if (parser.parseOptionalAttrDict(result.attributes) || 
         parser.parseAttribute(value, "value", result.attributes))
         return failure();
-    
     result.addTypes(value.getType());
     return success();
 }
@@ -118,6 +157,10 @@ void AddOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
     state.addOperands({lhs, rhs});
 }
 
+void AddOp::inferShapes() {
+    getResult().setType(getLhs().getType());
+}
+
 mlir::ParseResult AddOp::parse(mlir::OpAsmParser &parser, mlir::OperationState &result) {
     return parseBinaryOp(parser, result);
 }
@@ -131,6 +174,22 @@ void GenericCallOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
     state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
     state.addOperands(arguments);
     state.addAttribute("callee", mlir::SymbolRefAttr::get(builder.getContext(), callee));
+}
+
+CallInterfaceCallable GenericCallOp::getCallableForCallee() {
+    return (*this)->getAttrOfType<SymbolRefAttr>("callee");
+}
+
+void GenericCallOp::setCalleeFromCallable(CallInterfaceCallable callee) {
+    (*this)->setAttr("callee", callee.get<SymbolRefAttr>());
+}
+
+Operation::operand_range GenericCallOp::getArgOperands() { 
+    return getInputs(); 
+}
+
+MutableOperandRange GenericCallOp::getArgOperandsMutable() {
+    return getInputsMutable();
 }
 
 void FuncOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -177,6 +236,10 @@ void MulOp::print(mlir::OpAsmPrinter &p) {
   printBinary(p, * this);
 }
 
+void MulOp::inferShapes() {
+    getResult().setType(getLhs().getType());
+}
+
 mlir::LogicalResult ReturnOp::verify() {
     auto function = cast<FuncOp>((*this).getParentOp());
     if (getNumOperands() > 1) {
@@ -210,10 +273,6 @@ void TransposeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state, m
     state.addOperands(value);
 }
 
-void TransposeOp::getCanonicalizationPatterns(RewritePatternSet &result, MLIRContext *context) {
-    result.add<SimplifyRedundantTranspose>(context);
-}
-
 mlir::LogicalResult TransposeOp::verify() {
     auto inputType = llvm::dyn_cast<RankedTensorType>(getOperand().getType());
     auto resultType = llvm::dyn_cast<RankedTensorType>(getType());
@@ -226,6 +285,33 @@ mlir::LogicalResult TransposeOp::verify() {
     }
     return mlir::success();
 }
+
+void TransposeOp::inferShapes() {
+    auto arrayTy = llvm::cast<RankedTensorType>(getOperand().getType());
+    llvm::SmallVector<int64_t, 2> dims(llvm::reverse(arrayTy.getShape()));
+    getResult().setType(RankedTensorType::get(dims, arrayTy.getElementType()));
+}
+
+
+bool CastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+    if (inputs.size() != 1 || outputs.size() != 1)
+        return false;
+
+    TensorType input = inputs.front().dyn_cast<TensorType>();
+    TensorType output = outputs.front().dyn_cast<TensorType>();
+
+    if (!input || !output || input.getElementType() != output.getElementType() ) {
+        return false;
+    }
+
+    return (!input.hasRank() || !output.hasRank() || input == output);
+}
+
+void CastOp::inferShapes() {
+    getResult().setType(getInput().getType());
+}
+
+
 
 #define GET_OP_CLASSES
 #include "Ops.cpp.inc"

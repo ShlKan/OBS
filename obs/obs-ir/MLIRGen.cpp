@@ -32,6 +32,7 @@
 #include <optional>
 #include <vector>
 
+
 using namespace mlir::obs;
 using namespace obs;
 
@@ -106,8 +107,8 @@ private:
     if (auto *lit = dyn_cast<LiteralExprAST>(&expr)) {
         for (auto &value : lit -> getValues()) {
             collectData(*value, data);
-            return;
         }
+        return;
     }
 
     assert(isa<NumberExprAST>(expr) && "expected literal or number expr");
@@ -119,6 +120,8 @@ private:
     std::vector<double> data;
     data.reserve(std::accumulate(lit.getDims().begin(), lit.getDims().end(), 1, std::multiplies<int>()));
     collectData(lit, data);
+
+    
 
     mlir::Type elementType = builder.getF64Type();
     auto dataType = mlir::RankedTensorType::get(lit.getDims(), elementType);
@@ -222,6 +225,11 @@ private:
     } else if (returnOp.hasOperand()) {
         function.setType(builder.getFunctionType(function.getFunctionType().getInputs(), getType(VarType{})));
     }
+
+    if (funcAST.getProto()->getName() != "main") {
+      function.setPrivate();
+    }
+
     return function;
   }
 

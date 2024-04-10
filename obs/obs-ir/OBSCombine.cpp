@@ -7,6 +7,10 @@
 using namespace mlir;
 using namespace obs;
 
+namespace {
+#include "OBSCombine.inc"
+} //namespace
+
 struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
     SimplifyRedundantTranspose(mlir::MLIRContext *context) : 
         mlir::OpRewritePattern<TransposeOp>(context, /* benefit = */ 1) {}
@@ -24,4 +28,13 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
     }
 
 };
+
+void TransposeOp::getCanonicalizationPatterns(RewritePatternSet &results, MLIRContext *context ) {
+    results.add<SimplifyRedundantTranspose>(context);
+}
+
+void ReshapeOp::getCanonicalizationPatterns(RewritePatternSet &results, MLIRContext *context) {
+    results.add<ReshapeReshapeOptPattern, RedundantReshapeOptPattern, 
+                FoldConstantReshapeOptPattern>(context);
+}
 

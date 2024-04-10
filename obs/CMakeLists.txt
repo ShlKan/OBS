@@ -22,22 +22,31 @@ list(INSERT CMAKE_MODULE_PATH 0
   "${LLVM_COMMON_CMAKE_UTILS}/Modules"
   )
 
-include(CMakeParseArguments)
 include(AddOBS)
 
 include_directories(include/)
+
+set(LLVM_TARGET_DEFINITIONS obs-ir/OBSCombine.td)
+mlir_tablegen(OBSCombine.inc -gen-rewriters)
+add_public_tablegen_target(OBSCombine)
+
 add_obs_executable(obstest 
     obs-ir/obs.cpp 
     obs-ir/Dialect.cpp
     obs-ir/MLIRGen.cpp
+    obs-ir/OBSCombine.cpp
+    obs-ir/ShapeInferencePass.cpp
     parser/AST.cpp
   DEPENDS
     OBSOpGen
+    OBSCombine
+    ShapeInferenceInterfaceIncGen
   )
 
 target_link_libraries(obstest
   PRIVATE
   MLIRAnalysis
+  MLIRCastInterfaces
   MLIRFunctionInterfaces
   MLIRIR
   MLIRParser
@@ -45,3 +54,4 @@ target_link_libraries(obstest
   MLIRSideEffectInterfaces
   MLIRTransforms
 )
+
