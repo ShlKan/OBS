@@ -149,7 +149,7 @@ def PrintOp: OBS_Op<"print"> {
     let description = [{
         The print builtin operation prints a given input sensor, and produces no results.
     }];
-    let arguments = (ins F64Tensor:$input);
+    let arguments = (ins AnyTypeOf<[F64Tensor, F64MemRef]>:$input);
     let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 

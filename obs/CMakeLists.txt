@@ -36,6 +36,7 @@ add_obs_executable(obstest
     obs-ir/MLIRGen.cpp
     obs-ir/OBSCombine.cpp
     obs-ir/ShapeInferencePass.cpp
+    obs-ir/LowerToAffineLoops.cpp
     parser/AST.cpp
   DEPENDS
     OBSOpGen
@@ -43,15 +44,22 @@ add_obs_executable(obstest
     ShapeInferenceInterfaceIncGen
   )
 
+get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
+get_property(extension_libs GLOBAL PROPERTY MLIR_EXTENSION_LIBS)
+
 target_link_libraries(obstest
   PRIVATE
+  ${dialect_libs}
+  ${extension_libs} 
   MLIRAnalysis
+  MLIRCallInterfaces
   MLIRCastInterfaces
   MLIRFunctionInterfaces
   MLIRIR
   MLIRParser
   MLIRPass
   MLIRSideEffectInterfaces
+  MLIRSupport
   MLIRTransforms
 )
 
