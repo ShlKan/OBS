@@ -11,6 +11,7 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -18,11 +19,15 @@
 #include <algorithm>
 #include <iostream>
 #include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/DialectImplementation.h>
 #include <mlir/IR/IRMapping.h>
 #include <mlir/IR/MLIRContext.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/IR/TypeSupport.h>
+#include <mlir/IR/Types.h>
 #include <mlir/IR/ValueRange.h>
 #include <mlir/Interfaces/CallInterfaces.h>
+#include <mlir/Support/StorageUniquer.h>
 #include <mlir/Transforms/InliningUtils.h>
 #include <string>
 
@@ -66,6 +71,53 @@ struct ToyInlinerInterface : public DialectInlinerInterface {
     }
 
 };
+
+namespace mlir {
+namespace obs {
+namespace detail {
+
+struct StructTypeStorage : public mlir::TypeStorage {
+
+    using KeyTy = llvm::ArrayRef<mlir::Type>;
+
+    StructTypeStorage(llvm::ArrayRef<mlir::Type> elementTypes)
+        : elementTypes(elementTypes) {}
+
+    bool operator==(const KeyTy &key) const { return key == elementTypes; }
+
+    static llvm::hash_code hashKey(const KeyTy &key) {
+        return llvm::hash_value(key);
+    }
+
+    static KeyTy getKey(llvm::ArrayRef<mlir::Type> elementTypes) {
+        return KeyTy(elementTypes);
+    }
+
+    static StructTypeStorage *construct(mlir::TypeStorageAllocator &allocator, const KeyTy &key) {
+        llvm::ArrayRef<mlir::Type> elementTypes = allocator.copyInto(key);
+        return new (allocator.allocate<StructTypeStorage>()) StructTypeStorage(elementTypes);
+    }
+
+    
+    llvm::ArrayRef<mlir::Type> elementTypes;
+};
+
+} //detail
+} //obs
+} //mlir
+
+StructType StructType::get(llvm::ArrayRef<mlir::Type> elementTypes) {
+    mlir::MLIRContext *ctx = elementTypes.front().getContext();
+    return Base::get(ctx, elementTypes);   
+}
+
+llvm::ArrayRef<mlir::Type> StructType::getElementTypes() {
+    return getImpl()->elementTypes;
+}
+
+mlir::Type OBSDialect::parseType(DialectAsmParser &parser) const {
+    
+}
 
 void OBSDialect::initialize() {
     addOperations<

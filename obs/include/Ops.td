@@ -21,10 +21,17 @@ def OBS_Dialect: Dialect {
         print results. This dialect provides a reprentation of the language that is amenable to analysis and optimization.
     }];
 
+    let useDefaultTypePrinterParser = 1;
+
     let cppNamespace = "::mlir::obs";
 }
 
 class OBS_Op<string mnemonic, list<Trait> traits = []> : Op<OBS_Dialect, mnemonic, traits>;
+
+def OBS_StructType : 
+    DialectType<OBS_Dialect, CPred<"::llvm::isa<StructType>($_self)">, "OBS struct type">;
+
+def OBS_Type : AnyTypeOf<[F64Tensor, OBS_StructType]>;
 
 def ConstantOp : OBS_Op<"constant", [Pure]> {
 
@@ -105,6 +112,52 @@ def FuncOp : OBS_Op<"func",
     let skipDefaultBuilders = 1;
 }
 
+def StructAccessOp : OBS_Op<"struct_access", [pure]> {
+    let summary = "struct access";
+    let description = [{
+        Access the Nth element of a value returning a struct type.
+    }];
+
+    let arguments = (ins OBS_StructType:$input, I64Attr:$index);
+    let results = (outs OBS_Type:$output);
+
+    let assemblyFormat = [{
+        $input `[` $index `]` attr-dict `:` type($input) `->` type($output)
+    }];
+
+    let builders = [
+        OpBuilder<(ins "Value":$input, "size_t":$index)>
+    ];
+
+    let hasVerifier = 1;
+
+    let hasFolder = 1;
+
+}
+
+def StructConstantOp : OBS_Op<"struct_constant", [ConstantLike, Pure]> {
+    let summary = "struct constant";
+    let description = [{
+        Constant operation turns a literal struct value into an SSA value. The data
+        is attached to the operation as an attribute. The struct constant is encoded
+         as an array of other constant values. For example:
+
+        ```mlir
+            %0 = toy.struct_constant [
+            dense<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]> : tensor<2x3xf64>
+            ] : !toy.struct<tensor<*xf64>>
+        ```
+    }];
+
+    let arguments = (ins ArraryAttr:$value);
+    let results = (outs OBS_StructType:$output);
+
+    let assemblyFormat = "$value attr-dict `:` type($output)";
+
+    let hasVerifier = 1;
+    let hasFolder = 1;
+}
+
 def GenericCallOp: OBS_Op<"generic_call", 
                           [DeclareOpInterfaceMethods<CallOpInterface>]> {
     let summary = "generic call operation";
@@ -113,9 +166,9 @@ def GenericCallOp: OBS_Op<"generic_call",
         of its arguments.
     }];
 
-    let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<F64Tensor>:$inputs);
+    let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<OBS_Type>:$inputs);
 
-    let results = (outs F64Tensor);
+    let results = (outs OBS_Type);
 
     let assemblyFormat = [{
         $callee `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
@@ -194,7 +247,7 @@ def ReturnOp : OBS_Op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {
         The "return" operation represents a return operation within a function;
     }];
 
-    let arguments = (ins Variadic<F64Tensor>:$input);
+    let arguments = (ins Variadic<OBS_Type>:$input);
     let assemblyFormat = "($input^ `:` type($input))? attr-dict ";
  
     let builders = [

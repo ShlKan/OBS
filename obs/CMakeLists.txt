@@ -1,5 +1,8 @@
 set(LLVM_LINK_COMPONENTS
+  Core
   Support
+  nativecodegen
+  OrcJIT
   )
   
 include(CMakeDependentOption)
@@ -37,6 +40,7 @@ add_obs_executable(obstest
     obs-ir/OBSCombine.cpp
     obs-ir/ShapeInferencePass.cpp
     obs-ir/LowerToAffineLoops.cpp
+    obs-ir/LowerToLLVM.cpp
     parser/AST.cpp
   DEPENDS
     OBSOpGen
@@ -45,21 +49,30 @@ add_obs_executable(obstest
   )
 
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
+get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 get_property(extension_libs GLOBAL PROPERTY MLIR_EXTENSION_LIBS)
 
 target_link_libraries(obstest
   PRIVATE
   ${dialect_libs}
+  ${conversion_libs}
   ${extension_libs} 
   MLIRAnalysis
+  MLIRBuiltinToLLVMIRTranslation
   MLIRCallInterfaces
   MLIRCastInterfaces
+  MLIRExecutionEngine
   MLIRFunctionInterfaces
   MLIRIR
+  MLIRLLVMCommonConversion
+  MLIRLLVMDialect
+  MLIRLLVMToLLVMIRTranslation
+  MLIRMemRefDialect
   MLIRParser
   MLIRPass
   MLIRSideEffectInterfaces
   MLIRSupport
+  MLIRTargetLLVMIRExport
   MLIRTransforms
 )
 
