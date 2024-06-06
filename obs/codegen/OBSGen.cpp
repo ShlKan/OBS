@@ -1,5 +1,7 @@
 
+#include "clang/Tooling/CommonOptionsParser.h"
 #include "llvm/Support/CommandLine.h"
+
 #include <iostream>
 #include <vector>
 
@@ -14,7 +16,6 @@ int main(int argc, const char **argv) {
 
   if (!OptionsParser) {
     // Fail gracefully for unsupported options.
-    std::cout << "error ----" << std::endl;
     llvm::errs() << OptionsParser.takeError() << "error";
     return 1;
   }

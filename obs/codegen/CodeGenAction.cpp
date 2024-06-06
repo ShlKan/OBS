@@ -2,6 +2,7 @@
 
 #include "CodeGenAction.h"
 #include "CodeGen.h"
+#include "Dialect.h"
 
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
@@ -20,10 +21,11 @@ namespace mlir {
 namespace obs {
 
 void CodeGenConsumer::HandleTranslationUnit(ASTContext &context) {
-  llvm::outs() << "Enter HandleTranslationUnit\n";
   MLIRContext codegenContext;
-  MLIRGenImpl mlirGen(codegenContext);
-  mlirGen.TraverseDecl(context.getTranslationUnitDecl());
+  codegenContext.getOrLoadDialect<OBSDialect>();
+  MLIRGenImpl mlirGen(codegenContext, context);
+  mlirGen.mlirGen(*context.getTranslationUnitDecl());
+  mlirGen.dump();
 }
 
 } // namespace obs

@@ -8,7 +8,7 @@ include(GNUInstallDirs)
 set(MLIR_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include/ ) # --includedir
 set(CLANG_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../clang/include/ ) # --includedir
 set(CLANG_INCLUDE_DIR_INC ${CMAKE_BINARY_DIR}/tools/clang/include/ ) # --includedir
-set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include/)
+set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include/ )
 include_directories(SYSTEM ${CLANG_INCLUDE_DIR})
 include_directories(SYSTEM ${CLANG_INCLUDE_DIR_INC})
 include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
@@ -53,6 +53,7 @@ add_obs_executable(codegen
     codegen/OBSGen.cpp
     codegen/CodeGenAction.cpp
     codegen/CodeGen.cpp
+    obs-ir/Dialect.cpp
   DEPENDS
     OBSOpGen
 )

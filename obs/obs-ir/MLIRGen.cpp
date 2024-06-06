@@ -1,19 +1,19 @@
 
 #include "MLIRGen.h"
 
+#include "AST.h"
+#include "Dialect.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
-#include "AST.h"
-#include "Dialect.h"
 
+#include "Lexer.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
-#include "Lexer.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
@@ -35,6 +35,7 @@
 #include <mlir/Support/LLVM.h>
 #include <numeric>
 #include <optional>
+#include <sys/_types/_int64_t.h>
 #include <vector>
 
 using namespace mlir::obs;
@@ -54,34 +55,35 @@ namespace {
 class MLIRGenImpl {
 
 public:
-  MLIRGenImpl(mlir::MLIRContext &context) : builder( &context) {}
+  MLIRGenImpl(mlir::MLIRContext &context) : builder(&context) {}
 
   mlir::ModuleOp mlirGen(ModuleAST &moduleAST) {
     theModule = mlir::ModuleOp::create(builder.getUnknownLoc());
 
     for (FunctionAST &f : moduleAST) {
-        mlirGen(f);
+      mlirGen(f);
     }
 
     if (failed(mlir::verify(theModule))) {
-        theModule->emitError("module verification error");
-        return nullptr;
+      theModule->emitError("module verification error");
+      return nullptr;
     }
     return theModule;
   }
 
 private:
   mlir::ModuleOp theModule;
-  mlir::OpBuilder  builder;
+  mlir::OpBuilder builder;
   llvm::ScopedHashTable<StringRef, mlir::Value> symbolTable;
 
   mlir::Location loc(const Location &loc) {
-    return mlir::FileLineColLoc::get(builder.getStringAttr(*loc.file), loc.line, loc.col);
+    return mlir::FileLineColLoc::get(builder.getStringAttr(*loc.file), loc.line,
+                                     loc.col);
   }
 
   mlir::LogicalResult declare(llvm::StringRef var, mlir::Value value) {
     if (symbolTable.count(var)) {
-        return mlir::failure();
+      return mlir::failure();
     }
     symbolTable.insert(var, value);
     return mlir::success();
@@ -89,46 +91,47 @@ private:
 
   mlir::Type getType(ArrayRef<int64_t> shape) {
     if (shape.empty()) {
-        return mlir::UnrankedTensorType::get(builder.getF64Type());
+      return mlir::UnrankedTensorType::get(builder.getF64Type());
     }
     return mlir::RankedTensorType::get(shape, builder.getF64Type());
   }
 
-  mlir::Type getType(const VarType &type) {
-    return getType(type.shape);
-  }
+  mlir::Type getType(const VarType &type) { return getType(type.shape); }
 
   mlir::obs::FuncOp mlirGen(PrototypeAST &proto) {
     auto location = loc(proto.loc());
 
-    llvm::SmallVector<mlir::Type, 4> argTypes(proto.getArgs().size(), getType(VarType{}));
+    llvm::SmallVector<mlir::Type, 4> argTypes(proto.getArgs().size(),
+                                              getType(VarType{}));
 
     auto funcType = builder.getFunctionType(argTypes, std::nullopt);
-    return builder.create<mlir::obs::FuncOp>(location, proto.getName(), funcType);
+    return builder.create<mlir::obs::FuncOp>(location, proto.getName(),
+                                             funcType);
   }
 
   void collectData(ExprAST &expr, std::vector<double> &data) {
     if (auto *lit = dyn_cast<LiteralExprAST>(&expr)) {
-        for (auto &value : lit -> getValues()) {
-            collectData(*value, data);
-            return;
-        }
+      for (auto &value : lit->getValues()) {
+        collectData(*value, data);
+        return;
+      }
     }
 
     assert(isa<NumberExprAST>(expr) && "expected literal or number expr");
     data.push_back(cast<NumberExprAST>(expr).getValue());
   }
 
-  mlir::Value mlirGen(LiteralExprAST &lit ) {
+  mlir::Value mlirGen(LiteralExprAST &lit) {
     auto type = getType(lit.getDims());
     std::vector<double> data;
-    data.reserve(std::accumulate(lit.getDims().begin(), lit.getDims().end(), 1, std::multiplies<int>()));
+    data.reserve(std::accumulate(lit.getDims().begin(), lit.getDims().end(), 1,
+                                 std::multiplies<int>()));
     collectData(lit, data);
 
     mlir::Type elementType = builder.getF64Type();
     auto dataType = mlir::RankedTensorType::get(lit.getDims(), elementType);
 
-    auto dataAttribute = 
+    auto dataAttribute =
         mlir::DenseElementsAttr::get(dataType, llvm::ArrayRef(data));
 
     return builder.create<ConstantOp>(loc(lit.loc()), type, dataAttribute);
@@ -137,20 +140,20 @@ private:
   mlir::Value mlirGen(ExprAST &expr) {
     switch (expr.getKind()) {
     case obs::ExprAST::Expr_BinOp:
-        return mlirGen(cast<BinaryExprAST>(expr));
+      return mlirGen(cast<BinaryExprAST>(expr));
     case obs::ExprAST::Expr_Var:
-        return mlirGen(cast<VariableExprAST>(expr));
+      return mlirGen(cast<VariableExprAST>(expr));
     case obs::ExprAST::Expr_Literal:
-        return mlirGen(cast<LiteralExprAST>(expr));
+      return mlirGen(cast<LiteralExprAST>(expr));
     case obs::ExprAST::Expr_Call:
-        return mlirGen(cast<CallExprAST>(expr));
+      return mlirGen(cast<CallExprAST>(expr));
     case obs::ExprAST::Expr_Num:
-        return mlirGen(cast<NumberExprAST>(expr));
+      return mlirGen(cast<NumberExprAST>(expr));
     default:
-        mlir::emitError(loc(expr.loc()))
-             << "MLIR codegen encounter an unhandled expr kind '"
-             << Twine(expr.getKind()) << "'";
-        return nullptr;
+      mlir::emitError(loc(expr.loc()))
+          << "MLIR codegen encounter an unhandled expr kind '"
+          << Twine(expr.getKind()) << "'";
+      return nullptr;
     }
   }
 
@@ -161,9 +164,10 @@ private:
       return mlir::failure();
     }
 
-    auto ownType = mlir::obs::OwnType::get(theModule.getContext(), "vector", {1,2});
+    auto ownType =
+        mlir::obs::OwnType::get(theModule.getContext(), "vector", {1, 2});
     auto refType = mlir::obs::RefType::get({ownType});
-    builder.create<RefOp>(loc(call.loc()), refType , arg);
+    builder.create<RefOp>(loc(call.loc()), refType, arg);
 
     /*
     auto arg = mlirGen(*call.getArg());
@@ -173,13 +177,13 @@ private:
 
     builder.create<PrintOp>(loc(call.loc()), arg); */
     return mlir::success();
-  } 
+  }
 
   mlir::LogicalResult mlirGen(ExprASTList &blockAST) {
     ScopedHashTableScope<StringRef, mlir::Value> varScope(symbolTable);
 
     for (auto &expr : blockAST) {
-        if (auto *vardecl = dyn_cast<VarDeclExprAST>(expr.get())) {
+      if (auto *vardecl = dyn_cast<VarDeclExprAST>(expr.get())) {
         if (!mlirGen(*vardecl))
           return mlir::failure();
         continue;
@@ -192,7 +196,7 @@ private:
         continue;
       }
 
-      // Generic expression dispatch codegen.                                                                                                                         
+      // Generic expression dispatch codegen.
       if (!mlirGen(*expr))
         return mlir::failure();
     }
@@ -204,39 +208,43 @@ private:
   }
 
   mlir::obs::FuncOp mlirGen(FunctionAST &funcAST) {
-    llvm::ScopedHashTableScope<llvm::StringRef, mlir::Value> varScope(symbolTable);
+    llvm::ScopedHashTableScope<llvm::StringRef, mlir::Value> varScope(
+        symbolTable);
 
     builder.setInsertionPointToEnd(theModule.getBody());
     mlir::obs::FuncOp function = mlirGen(*funcAST.getProto());
-    if (! function) {
-        return nullptr;
+    if (!function) {
+      return nullptr;
     }
 
     mlir::Block &entryBlock = function.front();
 
     auto protoArgs = funcAST.getProto()->getArgs();
 
-    for (const auto nameValue : llvm::zip(protoArgs, entryBlock.getArguments())) {
-        if (failed(declare(std::get<0>(nameValue)->getName(), std::get<1>(nameValue)))) {
-            return nullptr;
-        }
+    for (const auto nameValue :
+         llvm::zip(protoArgs, entryBlock.getArguments())) {
+      if (failed(declare(std::get<0>(nameValue)->getName(),
+                         std::get<1>(nameValue)))) {
+        return nullptr;
+      }
     }
 
-    builder.setInsertionPointToStart( &entryBlock );
+    builder.setInsertionPointToStart(&entryBlock);
 
     if (mlir::failed(mlirGen(*funcAST.getBody()))) {
-        function->erase();
-        return nullptr;
+      function->erase();
+      return nullptr;
     }
 
     ReturnOp returnOp;
     if (!entryBlock.empty()) {
-        returnOp = dyn_cast<ReturnOp>(entryBlock.back());
+      returnOp = dyn_cast<ReturnOp>(entryBlock.back());
     }
     if (!returnOp) {
-        builder.create<ReturnOp>(loc(funcAST.getProto()->loc()));
+      builder.create<ReturnOp>(loc(funcAST.getProto()->loc()));
     } else if (returnOp.hasOperand()) {
-        function.setType(builder.getFunctionType(function.getFunctionType().getInputs(), getType(VarType{})));
+      function.setType(builder.getFunctionType(
+          function.getFunctionType().getInputs(), getType(VarType{})));
     }
     return function;
   }
@@ -244,18 +252,18 @@ private:
   mlir::Value mlirGen(BinaryExprAST &binop) {
     mlir::Value lhs = mlirGen(*binop.getLHS());
     if (!lhs)
-        return nullptr;
+      return nullptr;
     mlir::Value rhs = mlirGen(*binop.getRHS());
     if (!rhs)
-        return nullptr;
+      return nullptr;
 
     auto location = loc(binop.loc());
 
     switch (binop.getOp()) {
     case '+':
-        return builder.create<AddOp>(location, lhs, rhs);
+      return builder.create<AddOp>(location, lhs, rhs);
     case '*':
-        return builder.create<MulOp>(location, lhs, rhs);
+      return builder.create<MulOp>(location, lhs, rhs);
     }
 
     emitError(location, "invalid binary operator '") << binop.getOp() << "'";
@@ -264,23 +272,25 @@ private:
 
   mlir::Value mlirGen(VariableExprAST &expr) {
     if (auto variable = symbolTable.lookup(expr.getName())) {
-        builder.create<ReadOp>(loc(expr.loc()), variable);
-        return variable;
+      builder.create<ReadOp>(loc(expr.loc()), variable);
+      return variable;
     }
-    mlir::emitError(loc(expr.loc()), "error: unknown variable '") << expr.getName() << "'";
+    mlir::emitError(loc(expr.loc()), "error: unknown variable '")
+        << expr.getName() << "'";
     return nullptr;
-  } 
+  }
 
   mlir::LogicalResult mlirGen(ReturnExprAST &ret) {
     auto location = loc(ret.loc());
 
     mlir::Value expr = nullptr;
     if (ret.getExpr().has_value()) {
-        if (!(expr = mlirGen(**ret.getExpr()))){
-            return mlir::failure();
-        }
+      if (!(expr = mlirGen(**ret.getExpr()))) {
+        return mlir::failure();
+      }
     }
-    builder.create<ReturnOp>(location, expr? ArrayRef(expr) : ArrayRef<mlir::Value>());
+    builder.create<ReturnOp>(location,
+                             expr ? ArrayRef(expr) : ArrayRef<mlir::Value>());
     return mlir::success();
   }
 
@@ -291,20 +301,21 @@ private:
     SmallVector<mlir::Value, 4> operands;
 
     for (auto &expr : call.getArgs()) {
-        auto arg = mlirGen(*expr);
-        if (!arg) {
-            return nullptr;
-        }
-        operands.push_back(arg);
+      auto arg = mlirGen(*expr);
+      if (!arg) {
+        return nullptr;
+      }
+      operands.push_back(arg);
     }
 
     if (callee == "transpose") {
-        if (call.getArgs().size() != 1) {
-            mlir::emitError(location, "MLIR codegen encountered an error: obs.transpose "
-                                                   "does not accept multiple arguments.");
-            return nullptr;
-        }
-        return builder.create<TransposeOp>(location, operands[0]);
+      if (call.getArgs().size() != 1) {
+        mlir::emitError(location,
+                        "MLIR codegen encountered an error: obs.transpose "
+                        "does not accept multiple arguments.");
+        return nullptr;
+      }
+      return builder.create<TransposeOp>(location, operands[0]);
     }
     return builder.create<GenericCallOp>(location, callee, operands);
   }
@@ -314,67 +325,61 @@ private:
     auto *init = vardecl.getInitVal();
 
     if (!init) {
-        mlir::emitError(loc(vardecl.loc()), "missing initializer in variable declaration");
-        return nullptr;
+      mlir::emitError(loc(vardecl.loc()),
+                      "missing initializer in variable declaration");
+      return nullptr;
     }
-
-    
 
     mlir::Value value = mlirGen(*init);
 
     StringRef type = "vector";
 
-    auto ownType = mlir::obs::OwnType::get(theModule.getContext(), "vector", {1,2});
-    
-    std::vector<double> data = {1, 2};
+    auto ownType =
+        mlir::obs::OwnType::get(theModule.getContext(), "vector", {1, 2});
 
-    
-    builder.getI32VectorAttr({1, 2});
-    value = builder.create<OwnOp>(loc(vardecl.loc()), ownType , type, value);
+    std::vector<int32_t> data;
+    data.push_back(2);
+    data.push_back(3);
+
+    value = builder.create<OwnOp>(loc(vardecl.loc()), ownType, type,
+                                  llvm::ArrayRef<int32_t>(data));
 
     if (failed(declare(vardecl.getName(), value))) {
-        return nullptr;
+      return nullptr;
     }
 
     return value;
 
-/*
-    auto *init = vardecl.getInitVal();
+    /*
+        auto *init = vardecl.getInitVal();
 
-    if (!init) {
-        mlir::emitError(loc(vardecl.loc()), "missing initializer in variable declaration");
-        return nullptr;
-    }
+        if (!init) {
+            mlir::emitError(loc(vardecl.loc()), "missing initializer in variable
+       declaration"); return nullptr;
+        }
 
-    mlir::Value value = mlirGen(*init);
-    if (!value) {
-        return nullptr;
-    }
+        mlir::Value value = mlirGen(*init);
+        if (!value) {
+            return nullptr;
+        }
 
-    if (!vardecl.getType().shape.empty()) {
-        value = builder.create<ReshapeOp>(loc(vardecl.loc()), getType(vardecl.getType()), value);
-    }
+        if (!vardecl.getType().shape.empty()) {
+            value = builder.create<ReshapeOp>(loc(vardecl.loc()),
+       getType(vardecl.getType()), value);
+        }
 
-    if (failed(declare(vardecl.getName(), value))) {
-        return nullptr;
-    }
-    return value; */
+        if (failed(declare(vardecl.getName(), value))) {
+            return nullptr;
+        }
+        return value; */
   }
-
 };
 
-} //namespace
+} // namespace
 
 namespace obs {
-mlir::OwningOpRef<mlir::ModuleOp> mlirGen(mlir::MLIRContext &context, ModuleAST &moduleAST) {
-    return MLIRGenImpl(context).mlirGen(moduleAST);
+mlir::OwningOpRef<mlir::ModuleOp> mlirGen(mlir::MLIRContext &context,
+                                          ModuleAST &moduleAST) {
+  return MLIRGenImpl(context).mlirGen(moduleAST);
 }
-} //namespace obs
-
-
-
-
-
-
-
-
+} // namespace obs

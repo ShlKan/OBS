@@ -49,11 +49,11 @@ def OwnOp : OBS_op<"Own", []> {
     }];
 
 
-    let arguments = (ins StrAttr:$type, F64Tensor:$dim);
+    let arguments = (ins StrAttr:$type, DenseI32ArrayAttr:$dim);
     let results = (outs OBS_OwnType);
 
     let assemblyFormat = [{
-       `(` attr-dict `,` $dim `:` type($dim) `)` `:` type(results)
+       `(` attr-dict `)` `:` type(results)
     }];
 
 
