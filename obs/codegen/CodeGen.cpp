@@ -22,6 +22,7 @@
 #include <cassert>
 #include <clang/AST/Decl.h>
 #include <clang/AST/OperationKinds.h>
+#include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
@@ -34,6 +35,7 @@
 #include <mlir/IR/BuiltinOps.h>
 #include <mlir/IR/BuiltinTypes.h>
 #include <mlir/IR/Location.h>
+#include <mlir/IR/MLIRContext.h>
 #include <mlir/IR/OwningOpRef.h>
 
 #include <iostream>
@@ -58,7 +60,6 @@ namespace obs {
 void MLIRGenImpl::dump() { MLIRModule->dump(); }
 
 bool MLIRGenImpl::VisitFunctionDecl(clang::FunctionDecl *funcDecl) {
-
   auto location = loc(funcDecl->getBeginLoc());
   // Firstly, construct parameters.
   llvm::SmallVector<mlir::Type, 4> argTypes;
@@ -115,7 +116,7 @@ bool MLIRGenImpl::VisitDeclRefExpr(clang::DeclRefExpr *declRef) {
   auto location = loc(declRef->getLocation());
   for (auto *Expr = VisitedExprs.begin(); Expr != VisitedExprs.end(); Expr++) {
     if (*Expr == declRef) { // Already being visited.
-      VisitedExprs.erase(Expr);
+      // VisitedExprs.erase(Expr);
       return true;
     }
   }
@@ -136,7 +137,6 @@ bool MLIRGenImpl::VisitDeclRefExpr(clang::DeclRefExpr *declRef) {
 bool MLIRGenImpl::VisitDeclStmt(clang::DeclStmt *stmt) { return true; }
 
 bool MLIRGenImpl::VisitVarDecl(clang::VarDecl *varDecl) {
-
   auto location = loc(varDecl->getBeginLoc());
   Expr *init = varDecl->getInit();
   if (init && init->getType().getAsString() == "int") {
@@ -167,6 +167,49 @@ mlir::ModuleOp MLIRGenImpl::mlirGen(clang::TranslationUnitDecl &decl) {
     return nullptr;
   }
   return MLIRModule;
+}
+
+bool MLIRGenImpl::VisitIfStmt(clang::IfStmt *IfStmt) {
+  auto location = loc(IfStmt->getBeginLoc());
+  auto branch = MLIRBuilder.create<NonDeterBranch>(location);
+
+  auto InsertionPoint = MLIRBuilder.saveInsertionPoint();
+  auto *block = MLIRBuilder.createBlock(&branch.getOptions());
+
+  VContext.setReading();
+  TraverseStmt(IfStmt->getCond());
+  VContext.resetReading();
+
+  auto *blockThen = MLIRBuilder.createBlock(&branch.getOptions());
+
+  TraverseStmt(IfStmt->getThen());
+
+  auto *blockElse = MLIRBuilder.createBlock(&branch.getOptions());
+  TraverseStmt(IfStmt->getElse());
+
+  SmallVector<Block *, 2> SuccBlocks;
+  SuccBlocks.push_back(blockThen);
+  SuccBlocks.push_back(blockElse);
+
+  MLIRBuilder.setInsertionPoint(block, block->end());
+  MLIRBuilder.create<SuccOp>(location, llvm::ArrayRef<Block *>(SuccBlocks));
+
+  auto *exitBlock = MLIRBuilder.createBlock(&branch.getOptions());
+  MLIRBuilder.create<SkipOp>(location);
+  MLIRBuilder.setInsertionPoint(blockThen, blockThen->end());
+  MLIRBuilder.create<SuccOp>(location, exitBlock);
+  MLIRBuilder.setInsertionPoint(blockElse, blockElse->end());
+  MLIRBuilder.create<SuccOp>(location, exitBlock);
+  MLIRBuilder.getBlock();
+  MLIRBuilder.restoreInsertionPoint(InsertionPoint);
+
+  return true;
+}
+
+mlir::OwningOpRef<mlir::ModuleOp> mlirGen(mlir::MLIRContext &context,
+                                          clang::ASTContext &clang_context) {
+  return MLIRGenImpl(context, clang_context)
+      .mlirGen(*clang_context.getTranslationUnitDecl());
 }
 
 } // namespace obs

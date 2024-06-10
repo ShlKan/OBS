@@ -54,6 +54,7 @@ add_obs_executable(codegen
     codegen/CodeGenAction.cpp
     codegen/CodeGen.cpp
     obs-ir/Dialect.cpp
+    obs-ir/ReadOptPass.cpp
   DEPENDS
     OBSOpGen
 )
@@ -69,6 +70,8 @@ target_link_libraries(codegen
   MLIRFunctionInterfaces
   MLIRIR
   MLIRParser
+  MLIRPass
+  MLIRSupport
   MLIRSideEffectInterfaces
   MLIRTransforms
 )

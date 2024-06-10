@@ -15,26 +15,38 @@ namespace mlir {
 namespace obs {
 
 class CodeGenConsumer : public clang::ASTConsumer {
+private:
+  bool EnableOpt;
+
 public:
-  CodeGenConsumer() {}
+  CodeGenConsumer(bool EnableOpt) : EnableOpt(EnableOpt) {}
   void HandleTranslationUnit(clang::ASTContext &context) override;
 };
 
 class CodeGenFrontendAction : public clang::ASTFrontendAction {
+private:
+  bool EnableOpt;
+
 protected:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &ci, clang::StringRef) override {
-    return std::make_unique<CodeGenConsumer>();
+    return std::make_unique<CodeGenConsumer>(EnableOpt);
   }
+
+public:
+  CodeGenFrontendAction(bool EnableOpt) : EnableOpt(EnableOpt) {}
 };
 
 class CodeGenFrontendActionFactory
     : public clang::tooling::FrontendActionFactory {
+private:
+  bool EnableOpt;
+
 public:
-  CodeGenFrontendActionFactory() {}
+  CodeGenFrontendActionFactory(bool EnableOpt) : EnableOpt(EnableOpt) {}
 
   std::unique_ptr<clang::FrontendAction> create() override {
-    return std::make_unique<CodeGenFrontendAction>();
+    return std::make_unique<CodeGenFrontendAction>(EnableOpt);
   }
 };
 

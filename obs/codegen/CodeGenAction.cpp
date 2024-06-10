@@ -4,6 +4,11 @@
 #include "CodeGen.h"
 #include "Dialect.h"
 
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/Passes.h"
+
+#include "Passes.h"
+
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -13,6 +18,8 @@
 
 #include <iostream>
 #include <mlir/IR/MLIRContext.h>
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Pass/PassManager.h>
 #include <ostream>
 
 using namespace clang;
@@ -23,9 +30,24 @@ namespace obs {
 void CodeGenConsumer::HandleTranslationUnit(ASTContext &context) {
   MLIRContext codegenContext;
   codegenContext.getOrLoadDialect<OBSDialect>();
-  MLIRGenImpl mlirGen(codegenContext, context);
-  mlirGen.mlirGen(*context.getTranslationUnitDecl());
-  mlirGen.dump();
+  auto Module = mlirGen(codegenContext, context);
+
+  if (EnableOpt) {
+    mlir::registerPassManagerCLOptions();
+
+    mlir::PassManager pm(Module.get()->getName());
+
+    if (mlir::failed(mlir::applyPassManagerCLOptions(pm)))
+      exit(4);
+
+    mlir::OpPassManager &optPM = pm.nest<mlir::obs::FuncOp>();
+    optPM.addPass(mlir::obs::createReadOptimizePass());
+
+    if (mlir::failed(pm.run(*Module)))
+      exit(4);
+  }
+
+  Module->dump();
 }
 
 } // namespace obs

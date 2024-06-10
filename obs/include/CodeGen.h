@@ -63,6 +63,7 @@ public:
   bool VisitDeclStmt(clang::DeclStmt *stmt);
   bool VisitVarDecl(clang::VarDecl *varDecl);
   bool VisitDeclRefExpr(clang::DeclRefExpr *declRef);
+  bool VisitIfStmt(clang::IfStmt *IfStmt);
 
   void dump();
 
@@ -87,7 +88,7 @@ private:
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> mlirGen(mlir::MLIRContext &context,
-                                          clang::TranslationUnitDecl &decl);
+                                          clang::ASTContext &clang_context);
 
 } // namespace obs
 } // namespace mlir

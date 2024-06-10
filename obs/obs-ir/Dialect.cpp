@@ -109,11 +109,9 @@ void ConstantOp::print(mlir::OpAsmPrinter &printer) {
 }
 
 mlir::LogicalResult OwnOp::verify() {
-  if (getType() == "vector") {
+  if (getType() == "INT")
     return success();
-  } else {
-    return failure();
-  }
+  return failure();
 }
 
 mlir::LogicalResult RefOp::verify() {
@@ -362,7 +360,8 @@ void OBSDialect::printType(::mlir::Type type,
     printer << ", [";
     llvm::interleaveComma(ownType.getDims(), printer);
     printer << " ] )";
-  } else if (RefType refType = llvm::cast<RefType>(type)) {
+  } else if (llvm::isa<RefType>(type)) {
+    RefType refType = llvm::cast<RefType>(type);
     printer << "Ref( ";
     printer << refType.getOwnerType();
     printer << " )";

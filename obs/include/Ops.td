@@ -6,6 +6,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 def OBS_Dialect: Dialect {
     //The namespace of the Dialect.
@@ -87,7 +88,7 @@ def RefOp : OBS_op<"Ref", []> {
     ];
 }
 
-def ReadOp : OBS_op<"Read", []> {
+def ReadOp : OBS_op<"Read", [Pure]> {
 
     let summary = "Read the resource though a variable" ;
 
@@ -182,7 +183,23 @@ def AddOp : OBS_op<"add"> {
     ];
 }  
 
-def FuncOp : OBS_op<"func", [FunctionOpInterface, IsolatedFromAbove]> {
+def NonDeterBranch : OBS_op<"nd_br", [NoTerminator]> {
+    let summary = "A non-deterministic branch operator";
+    let description = [{
+        The non-deterministic branch allows the program to select any of the branches to execute randomly.
+    }];
+
+    let regions = (region AnyRegion:$options);
+}
+
+def SkipOp : OBS_op<"skip", [Terminator]> {
+    let summary = "A terminator to skip from an operation with region.";
+    let description = [{
+        A terminator to skip from an operation with region. For example, if-then-else statements.
+    }];
+}
+
+def FuncOp : OBS_op<"func", [FunctionOpInterface, NoTerminator , IsolatedFromAbove]> {
     let summary = "user defined function operation";
     let description = [{
         The "obs.func" operation represents a user defined function. These are callable SSA-region operations
@@ -296,6 +313,9 @@ def TransposeOp: OBS_op<"transpose"> {
     let hasVerifier = 1;
 }
 
+
+
+
 def ReturnOp : OBS_op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {
     let summary = "return operation";
     let description = [{
@@ -316,6 +336,18 @@ def ReturnOp : OBS_op<"return", [Pure, HasParent<"FuncOp">, Terminator]> {
     }];
 
     let hasVerifier = 1;
+}
+
+def SuccOp : OBS_op<"succ", [ Pure, HasParent<"NonDeterBranch">, Terminator]> {
+    let summary = "It lies at the end of NonDeterBranch's entry block";
+    let description = [{
+        The "succ" lists the possible non-deterministic;
+    }];
+    let successors = (successor VariadicSuccessor<AnySuccessor>:$succDests);
+    
+    let assemblyFormat = [{
+       $succDests attr-dict
+    }];
 }
 
 
